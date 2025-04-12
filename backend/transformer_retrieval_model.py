@@ -9,32 +9,28 @@ import utils
 tf.keras.utils.set_random_seed(10)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-# Preprocessing for data
-def preprocess_data(data_dir, encoder_maxlen=150, decoder_maxlen=50):
+def preprocess_data(data_dir, encoder_maxlen=150):
     '''
-    Loads and preprocesses the dataset, tokenizing the documents and summaries.
+    Loads and preprocesses the dataset, tokenizing the documents.
+    Assumes data is a list of dictionaries with a "document" key.
     '''
     train_data, test_data = utils.get_train_test_data(data_dir)
-    document, summary = utils.preprocess(train_data)
-    document_test, summary_test = utils.preprocess(test_data)
-
-    tokenizer = tf.keras.preprocessing.text.Tokenizer(filters='!"#$%&()*+,-./:;<=>?@\\^_`{|}~\t\n', oov_token='[UNK]', lower=False)
-    tokenizer.fit_on_texts(pd.concat([document, summary], ignore_index=True))
-
+    document = [entry['document'] for entry in train_data]
+    document_test = [entry['document'] for entry in test_data]
+    tokenizer = tf.keras.preprocessing.text.Tokenizer(
+        filters='!"#$%&()*+,-./:;<=>?@\\^_`{|}~\t\n', 
+        oov_token='[UNK]', 
+        lower=False
+    )
+    tokenizer.fit_on_texts(document)
     inputs = tokenizer.texts_to_sequences(document)
-    targets = tokenizer.texts_to_sequences(summary)
-
-    # Padding the sequences
     inputs = tf.keras.preprocessing.sequence.pad_sequences(inputs, maxlen=encoder_maxlen, padding='post', truncating='post')
-    targets = tf.keras.preprocessing.sequence.pad_sequences(targets, maxlen=decoder_maxlen, padding='post', truncating='post')
-
     inputs = tf.cast(inputs, dtype=tf.int32)
-    targets = tf.cast(targets, dtype=tf.int32)
 
-    # Return data as TensorFlow dataset
     BUFFER_SIZE = 10000
     BATCH_SIZE = 64
-    return tf.data.Dataset.from_tensor_slices((inputs, targets)).shuffle(BUFFER_SIZE).batch(BATCH_SIZE), document, summary, document_test, summary_test, tokenizer
+
+    return tf.data.Dataset.from_tensor_slices(inputs).shuffle(BUFFER_SIZE).batch(BATCH_SIZE), document, document_test, tokenizer
 
 # Positional Encoding Function
 def positional_encoding(positions, d_model):
@@ -149,17 +145,18 @@ def train_model(dataset, vocab_size, num_layers, embedding_dim, num_heads, fully
 # Example of how to integrate the model with the data and retrieve top K documents
 if __name__ == '__main__':
     # Example usage
-    data_dir = 'path_to_data_directory'
-    dataset, document, summary, document_test, summary_test, tokenizer = preprocess_data(data_dir)
+    data_dir = '../data'
+    dataset, document, document_test, tokenizer = preprocess_data(data_dir)
+    print(document)
 
-    vocab_size = len(tokenizer.word_index) + 1
-    transformer = train_model(dataset, vocab_size, num_layers=2, embedding_dim=128, num_heads=2, fully_connected_dim=128)
+    # vocab_size = len(tokenizer.word_index) + 1
+    # transformer = train_model(dataset, vocab_size, num_layers=2, embedding_dim=128, num_heads=2, fully_connected_dim=128)
 
-    query = "What is deep learning?"
-    doc_embeddings = np.array([transformer(np.expand_dims(tokenizer.texts_to_sequences([doc]), 0), training=False, enc_padding_mask=None) for doc in document])
+    # query = "What is deep learning?"
+    # doc_embeddings = np.array([transformer(np.expand_dims(tokenizer.texts_to_sequences([doc]), 0), training=False, enc_padding_mask=None) for doc in document])
     
-    top_k_docs = retrieve_similar_docs(query, doc_embeddings, tokenizer, transformer)
+    # top_k_docs = retrieve_similar_docs(query, doc_embeddings, tokenizer, transformer)
     
-    print("Top 3 relevant documents for the query:")
-    for idx in top_k_docs:
-        print(f"Document {idx}: {document[idx]}")
+    # print("Top 3 relevant documents for the query:")
+    # for idx in top_k_docs:
+    #     print(f"Document {idx}: {document[idx]}")

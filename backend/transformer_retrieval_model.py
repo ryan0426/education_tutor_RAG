@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import utils
 
 # Initialize random seed and suppress TensorFlow logging
-tf.keras.utils.set_random_seed(10)
+tf.keras.utils.set_random_seed(42)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 def preprocess_data(data_dir, encoder_maxlen=256):
@@ -101,13 +101,38 @@ class Encoder(tf.keras.layers.Layer):
         return x
 
 # Transformer Model (Encoder only for retrieval)
+@tf.keras.utils.register_keras_serializable()
 class Transformer(tf.keras.Model):
-    def __init__(self, num_layers, embedding_dim, num_heads, fully_connected_dim, vocab_size, max_pos_encoding, dropout_rate=0.1):
-        super(Transformer, self).__init__()
+    def __init__(self, num_layers, embedding_dim, num_heads, fully_connected_dim, vocab_size, max_pos_encoding, dropout_rate=0.1,**kwargs):
+        super(Transformer, self).__init__(**kwargs)
+        self.num_layers = num_layers
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.fully_connected_dim = fully_connected_dim
+        self.vocab_size = vocab_size
+        self.max_pos_encoding = max_pos_encoding
+        self.dropout_rate = dropout_rate
         self.encoder = Encoder(num_layers, embedding_dim, num_heads, fully_connected_dim, vocab_size, max_pos_encoding, dropout_rate)
 
     def call(self, input_sentence, training, enc_padding_mask):
         return self.encoder(x=input_sentence, training=training, mask=enc_padding_mask)
+    
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "num_layers": self.num_layers,
+            "embedding_dim": self.embedding_dim,
+            "num_heads": self.num_heads,
+            "fully_connected_dim": self.fully_connected_dim,
+            "vocab_size": self.vocab_size,
+            "max_pos_encoding": self.max_pos_encoding,
+            "dropout_rate": self.dropout_rate
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 # Cosine Similarity for Retrieval
 from sklearn.metrics.pairwise import cosine_similarity
@@ -157,15 +182,20 @@ if __name__ == '__main__':
     transformer = train_model(dataset, vocab_size, num_layers=2, embedding_dim=128, num_heads=2, fully_connected_dim=128)
     transformer.save("transformer_model.keras")
 
+    loaded_transformer = tf.keras.models.load_model(
+        "transformer_model.keras",
+        custom_objects={'Transformer': Transformer, 'masked_loss': masked_loss}
+    )
+
     query = "What is deep learning?"
     doc_embeddings = np.array([
-        transformer(tf.convert_to_tensor(tf.keras.preprocessing.sequence.pad_sequences(
+        loaded_transformer(tf.convert_to_tensor(tf.keras.preprocessing.sequence.pad_sequences(
         tokenizer.texts_to_sequences([doc]), maxlen=256, padding='post', truncating='post')), 
         training=False, enc_padding_mask=None) 
         for doc in document
     ])
     
-    top_k_docs = retrieve_similar_docs(query, doc_embeddings, tokenizer, transformer)
+    top_k_docs = retrieve_similar_docs(query, doc_embeddings, tokenizer, loaded_transformer)
     
     print("Top 3 relevant documents for the query:")
     for idx in top_k_docs:

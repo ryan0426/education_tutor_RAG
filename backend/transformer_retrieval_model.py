@@ -1,8 +1,6 @@
 import os
 import numpy as np
 import tensorflow as tf
-import pandas as pd
-import matplotlib.pyplot as plt
 import utils
 import random
 
@@ -11,44 +9,31 @@ tf.keras.utils.set_random_seed(42)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 def preprocess_data_contrastive(data_dir, encoder_maxlen=256, batch_size=64):
-    # Load raw documents
     raw_data = utils.get_train_test_data(data_dir)
     documents = [entry["document"] for entry in raw_data]
 
-    # 1. Add [CLS] to tokenizer vocab explicitly
     tokenizer = tf.keras.preprocessing.text.Tokenizer(
         filters='!"#$%&()*+,-./:;<=>?@\\^_`{|}~\t\n',
         oov_token='[UNK]',
         lower=False
     )
-    tokenizer.fit_on_texts(["[CLS]"] + documents)  # force [CLS] into the vocab
+    tokenizer.fit_on_texts(documents)
 
-    # 2. Get CLS token ID
-    cls_id = tokenizer.word_index.get("[CLS]")
-    if cls_id is None:
-        raise ValueError("[CLS] token not found in tokenizer.word_index")
-
-    # 3. Convert documents to token IDs
     sequences = tokenizer.texts_to_sequences(documents)
-
-    # 4. Prepend CLS token ID and pad
-    sequences = [[cls_id] + seq for seq in sequences]
     sequences = tf.keras.preprocessing.sequence.pad_sequences(
         sequences, maxlen=encoder_maxlen, padding='post', truncating='post'
     )
     sequences = tf.constant(sequences, dtype=tf.int32)
 
-    # 5. Prepare contrastive triplets
     def generate_triplets():
         num_docs = sequences.shape[0]
         for i in range(num_docs):
             anchor = sequences[i]
-            positive = augment_sequence(anchor)  # already implemented
-            neg_index = random.choice([j for j in range(num_docs) if j != i])
+            positive = augment_sequence(sequences[i])
+            neg_index = (i + 1000) % num_docs
             negative = sequences[neg_index]
             yield anchor, positive, negative
 
-    # 6. Wrap into tf.data.Dataset
     triplet_dataset = tf.data.Dataset.from_generator(
         generate_triplets,
         output_signature=(
@@ -83,28 +68,6 @@ def augment_sequence(seq, drop_prob=0.1):
     )
     return tf.convert_to_tensor(padded[0])
 
-def preprocess_data(data_dir, encoder_maxlen=256):
-    '''
-    Loads and preprocesses the dataset, tokenizing the documents.
-    Assumes data is a list of dictionaries with a "document" key.
-    '''
-    train_data = utils.get_train_test_data(data_dir)
-    document = [entry['document'] for entry in train_data]
-    tokenizer = tf.keras.preprocessing.text.Tokenizer(
-        filters='!"#$%&()*+,-./:;<=>?@\\^_`{|}~\t\n', 
-        oov_token='[UNK]', 
-        lower=False
-    )
-    tokenizer.fit_on_texts(document)
-    inputs = tokenizer.texts_to_sequences(document)
-    inputs = tf.keras.preprocessing.sequence.pad_sequences(inputs, maxlen=encoder_maxlen, padding='post', truncating='post')
-    inputs = tf.cast(inputs, dtype=tf.int32)
-
-    BUFFER_SIZE = 10000
-    BATCH_SIZE = 64
-
-    return tf.data.Dataset.from_tensor_slices(inputs).shuffle(BUFFER_SIZE).batch(BATCH_SIZE), document, tokenizer
-
 # Positional Encoding Function
 def positional_encoding(positions, d_model):
     position = np.arange(positions)[:, np.newaxis]
@@ -137,6 +100,28 @@ def masked_loss(real, pred):
     loss_ *= mask  # Mask the loss
     return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
 
+class AttentionPooling(tf.keras.layers.Layer):
+    def __init__(self, embedding_dim):
+        super(AttentionPooling, self).__init__()
+        self.dense = tf.keras.layers.Dense(1)
+
+    def call(self, inputs, mask):
+        # inputs: (batch_size, seq_len, embedding_dim)
+        # mask: (batch_size, 1, seq_len)
+        scores = self.dense(inputs)  # (batch_size, seq_len, 1)
+        scores = tf.squeeze(scores, axis=-1)  # (batch_size, seq_len)
+
+        if mask is not None:
+            mask = tf.squeeze(mask, axis=1)  # (batch_size, seq_len)
+            scores += (mask * -1e9)  # apply mask: padding gets -inf
+
+        weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, seq_len)
+        weights = tf.expand_dims(weights, axis=-1)  # (batch_size, seq_len, 1)
+
+        # Weighted sum
+        pooled = tf.reduce_sum(inputs * weights, axis=1)  # (batch_size, embedding_dim)
+        return pooled
+    
 # Encoder Layer for Transformer Model
 class EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, embedding_dim, num_heads, fully_connected_dim, dropout_rate=0.3):
@@ -168,7 +153,8 @@ class Encoder(tf.keras.layers.Layer):
         self.embedding_dim = embedding_dim
 
     def call(self, x, training, mask):
-        x = self.embedding(x) * tf.math.sqrt(tf.cast(self.embedding_dim, tf.float32)) + self.pos_encoding
+        # x = self.embedding(x) * tf.math.sqrt(tf.cast(self.embedding_dim, tf.float32)) + self.pos_encoding
+        x = self.embedding(x)
         x = self.dropout(x, training=training)
         for layer in self.enc_layers:
             x = layer(x=x, training=training, mask=mask)
@@ -189,6 +175,7 @@ class Transformer(tf.keras.Model):
         self.final_layer = tf.keras.layers.Dense(vocab_size)
         self.cls_proj = tf.keras.layers.Dense(embedding_dim, activation='tanh')
         self.encoder = Encoder(num_layers, embedding_dim, num_heads, fully_connected_dim, vocab_size, max_pos_encoding, dropout_rate)
+        self.attn_pool = AttentionPooling(embedding_dim)
 
     def call(self, input_sentence, training, enc_padding_mask):
         encoder_output = self.encoder(x=input_sentence, training=training, mask=enc_padding_mask)
@@ -197,8 +184,8 @@ class Transformer(tf.keras.Model):
     
     def encode(self, input_sentence, training, enc_padding_mask):
         encoder_output = self.encoder(x=input_sentence, training=training, mask=enc_padding_mask)
-        cls_embedding = encoder_output[:, 0, :]
-        return self.cls_proj(cls_embedding)
+        pooled = self.attn_pool(encoder_output, mask=enc_padding_mask)
+        return pooled
     
     def get_config(self):
         config = super().get_config()
@@ -221,7 +208,19 @@ class Transformer(tf.keras.Model):
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
-def retrieve_similar_docs(query, doc_embeddings, tokenizer, model, top_k=10):
+def rerank_by_length(documents, indices, scores, min_len=100, penalty=0.1):
+    reranked = []
+    for i in range(len(indices)):
+        doc = documents[indices[i]]
+        length = len(doc.split())
+        score = scores[i]
+        if length < min_len:
+            score *= penalty
+        reranked.append((indices[i], score))
+    reranked.sort(key=lambda x: x[1], reverse=True)
+    return [idx for idx, _ in reranked]
+
+def retrieve_similar_docs(query, doc_embeddings, tokenizer, model, document, top_k=10):
     # Step 1: Tokenize and pad query
     query_tokens = tokenizer.texts_to_sequences([query])
     query_tokens = tf.keras.preprocessing.sequence.pad_sequences(
@@ -229,47 +228,22 @@ def retrieve_similar_docs(query, doc_embeddings, tokenizer, model, top_k=10):
     )
     query_input = tf.convert_to_tensor(query_tokens)  # (1, 256)
 
-    # Step 2: Get query embedding (from encoder)
-    query_encoded = model.encode(query_input, training=False, enc_padding_mask=None)
+    # Step 2: Get query embedding (already mean-pooled inside model.encode)
+    query_embedding = model.encode(query_input, training=False, enc_padding_mask=None)  # (1, emb_dim)
 
-    # ⬅️ Use only the [CLS] embedding
-    query_embedding = query_encoded
+    # Step 3: Normalize both embeddings
+    query_embedding = tf.math.l2_normalize(query_embedding, axis=1).numpy()  # shape (1, emb_dim)
+    doc_embeddings_np = tf.math.l2_normalize(doc_embeddings, axis=1).numpy()  # shape (num_docs, emb_dim)
 
-    # Step 3: Convert to NumPy
-    query_embedding = query_embedding.numpy()
+    # Step 4: Compute cosine similarity
+    similarities = cosine_similarity(query_embedding, doc_embeddings_np)  # shape (1, num_docs)
 
-    # Step 4: Convert doc embeddings (assumed to be pooled at [CLS] too)
-    doc_embeddings_np = doc_embeddings.numpy()
-
-    query_embedding = tf.math.l2_normalize(query_embedding, axis=1).numpy()
-    doc_embeddings_np = tf.math.l2_normalize(doc_embeddings, axis=1).numpy()
-
-    # Step 5: Compute cosine similarity
-    similarities = cosine_similarity(query_embedding, doc_embeddings_np)
-
-    # Step 6: Top-k results
+    # Step 5: Get top-k result indices
     top_k_idx = np.argsort(similarities[0])[-top_k:][::-1]
+    top_k_scores = similarities[0][top_k_idx]
+    reranked_idx = rerank_by_length(documents=document, indices=top_k_idx, scores=top_k_scores)
 
     return top_k_idx
-
-# Training Process
-def train_model(dataset, vocab_size, num_layers, embedding_dim, num_heads, fully_connected_dim, epochs=12):
-    transformer = Transformer(num_layers, embedding_dim, num_heads, fully_connected_dim, vocab_size, max_pos_encoding=256)
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.0003)
-    
-    for epoch in range(epochs):
-        print(f"Epoch {epoch+1}/{epochs}")
-        for inp in dataset:
-            enc_padding_mask = create_padding_mask(inp)
-            with tf.GradientTape() as tape:
-                predictions = transformer(input_sentence=inp, training=True, enc_padding_mask=enc_padding_mask)
-                loss = masked_loss(inp, predictions)
-            
-            gradients = tape.gradient(loss, transformer.trainable_variables)
-            optimizer.apply_gradients(zip(gradients, transformer.trainable_variables))
-            
-        print(f"Epoch {epoch+1}: Loss {loss.numpy()}")
-    return transformer
 
 def contrastive_loss(anchor, positive, negative, margin=0.3):
     # Normalize embeddings
@@ -285,7 +259,7 @@ def contrastive_loss(anchor, positive, negative, margin=0.3):
     loss = tf.maximum(0.0, margin - pos_sim + neg_sim)
     return tf.reduce_mean(loss)
 
-def train_model_contrastive(dataset, vocab_size, num_layers, embedding_dim, num_heads, fully_connected_dim, epochs=15):
+def train_model_contrastive(dataset, vocab_size, num_layers, embedding_dim, num_heads, fully_connected_dim, epochs=10):
     transformer = Transformer(num_layers, embedding_dim, num_heads, fully_connected_dim, vocab_size, max_pos_encoding=256)
     optimizer = tf.keras.optimizers.Adam(learning_rate=0.0003)
 
@@ -337,7 +311,7 @@ def training():
     ], axis=0)
 
     query = "list operations in Python"
-    top_k_docs = retrieve_similar_docs(query, doc_embeddings, tokenizer, transformer)
+    top_k_docs = retrieve_similar_docs(query, doc_embeddings, tokenizer, transformer, document)
     
     print("Top 10 relevant documents for the query:")
     for idx in top_k_docs:
@@ -345,7 +319,7 @@ def training():
 
 def testing():
     data_dir = '../data'
-    dataset, document, tokenizer = preprocess_data(data_dir)
+    dataset, document, tokenizer = preprocess_data_contrastive(data_dir)
 
     loaded_transformer = tf.keras.models.load_model(
         "transformer_model.keras",

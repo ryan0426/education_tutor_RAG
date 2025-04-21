@@ -3,7 +3,7 @@
 import numpy as np
 import pickle
 import faiss
-import requests
+import ollama
 from sentence_transformers import SentenceTransformer
 
 class Retriever:
@@ -40,7 +40,6 @@ class RAGSystem:
         index_path="retrieval.index",
         texts_path="texts.pkl",
         embed_model="all-MiniLM-L6-v2",
-        ollama_url="http://127.0.0.1:11434/api/chat",
         model_name="deepseek-r1:1.5b",
         top_k=5
     ):
@@ -49,7 +48,6 @@ class RAGSystem:
             texts_path=texts_path,
             model_name=embed_model
         )
-        self.ollama_url = ollama_url
         self.ollama_model = model_name
         self.top_k = top_k
 
@@ -71,19 +69,15 @@ class RAGSystem:
 
     def _generate(self, prompt: str) -> str:
         """
-        Send prompt to Ollama HTTP API and return generated answer.
+        Send prompt to Ollama API and return generated answer.
         """
-        payload = {
-            "model": self.ollama_model,
-            "messages": [
+        response = ollama.chat(
+            model=self.ollama_model,
+            messages=[
                 {"role": "user", "content": prompt}
-            ],
-            "stream": False
-        }
-        response = requests.post(self.ollama_url, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        return data["message"]["content"]
+            ]
+        )
+        return response['message']['content']
 
     def answer_question(self, question: str) -> str:
         """

@@ -1,0 +1,6 @@
+# Python virtual environment
+venv/
+test.py
+.idea/
+backend/.DS_Store
+.DS_Store

@@ -1,0 +1,30 @@
+# Core frameworks for model training and inference
+tensorflow>=2.10            # TensorFlow for transformer_retrieval_model.py
+torch>=1.13                 # PyTorch for Seq2Seq generation with Transformers
+transformers>=4.30          # Hugging Face Transformers library
+sentence-transformers>=2.2  # Sentence-Transformers for embedding and retrieval
+
+# Retrieval indexing
+faiss-cpu>=1.7.3            # FAISS library for fast vector search (CPU version)
+# faiss-gpu>=1.7.3          # Uncomment if you want GPU-accelerated FAISS
+
+# Machine learning utilities
+scikit-learn>=1.2           # scikit-learn for cosine_similarity and other metrics
+numpy>=1.23                 # NumPy for numerical operations
+pandas>=1.5                 # pandas for JSON loading in utils.py
+
+# Web scraping dependencies
+requests>=2.28              # HTTP requests for data_crawling.py
+beautifulsoup4>=4.11        # HTML parsing for data_crawling.py
+lxml>=4.9                   # XML/HTML parser required by BeautifulSoup
+tqdm>=4.65                  # Progress bars for scraping loops
+
+# Optional (visualization, debugging)
+matplotlib>=3.6             # Matplotlib for any plotting needs
+
+
+tf-keras
+
+ollama
+
+streamlit

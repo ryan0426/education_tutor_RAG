@@ -1,3 +1,4 @@
+
 # Educational RAG System (American History)
 
 This project implements a **Retrieval-Augmented Generation (RAG)** system for answering questions about **American History**.  
@@ -7,7 +8,7 @@ It combines document retrieval with a local LLM model (e.g., DeepSeek via Ollama
 
 ## 🚀 How to Run Locally
 
-### 1. Install dependencies
+### 1. Set up Python Environment
 
 First, create and activate a Python virtual environment (optional but recommended):
 
@@ -24,9 +25,15 @@ pip install -r requirements.txt
 
 ---
 
-### 2. Setup and Start Ollama Server
+## 2. Install Ollama
 
-Make sure you have [Ollama](https://ollama.com/) installed on your machine.
+### macOS
+
+Install Ollama:
+
+```bash
+brew install ollama
+```
 
 Start the Ollama server:
 
@@ -34,17 +41,76 @@ Start the Ollama server:
 ollama serve
 ```
 
-Then in a separate terminal, pull the required model:
+Then in another terminal, pull the required model:
 
 ```bash
 ollama pull deepseek-r1:1.5b
 ```
 
-The server must be running before pulling models or sending any requests.
+---
+
+### Linux (Ubuntu/WSL2)
+
+Install Ollama:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Start the Ollama server:
+
+```bash
+ollama serve
+```
+
+Then pull the model:
+
+```bash
+ollama pull deepseek-r1:1.5b
+```
+
+> **Note**: Make sure `ollama serve` is running before pulling models.
 
 ---
 
-### 3. Launch the Streamlit app
+## 3. Install Conda and Setup FAISS for Linux (Optional for GPU Acceleration)
+
+If you are using Linux and want to utilize GPU-accelerated FAISS:
+
+### Install Conda (if not installed)
+
+```bash
+curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+```
+
+Follow the prompts to complete installation.
+
+Then restart the terminal or run:
+
+```bash
+source ~/.bashrc
+```
+
+### Create and activate Conda environment
+
+```bash
+conda create -n rag-env python=3.12
+conda activate rag-env
+```
+
+### Install required packages
+
+```bash
+pip install -r requirements.txt
+conda install faiss-gpu -c pytorch
+```
+
+✅ Now your FAISS will use GPU acceleration if available.
+
+---
+
+## 4. Launch the Streamlit App
 
 Run:
 

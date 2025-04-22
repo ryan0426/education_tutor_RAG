@@ -5,6 +5,7 @@ transformers>=4.30          # Hugging Face Transformers library
 sentence-transformers>=2.2  # Sentence-Transformers for embedding and retrieval
 
 # Retrieval indexing
+# faiss-gpu is not compatible with CUDA 12.x if it's installed with pip. Better use conda
 faiss-cpu>=1.7.3            # FAISS library for fast vector search (CPU version)
 # faiss-gpu>=1.7.3          # Uncomment if you want GPU-accelerated FAISS
 

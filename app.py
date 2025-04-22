@@ -9,7 +9,7 @@ import time
 sys.path.append(os.path.join(os.path.dirname(__file__), "backend"))
 
 # Import RAGSystem
-from rag_system import RAGSystem
+from backend.rag_system import RAGSystem
 
 # Initialize RAG system with correct paths
 rag = RAGSystem(

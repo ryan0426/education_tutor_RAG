@@ -57,6 +57,25 @@ class RAGSystem:
         """
         return self.retriever.retrieve(question, top_k=self.top_k)
 
+    '''
+    def _build_prompt(self, question, contexts):
+        context_text = "\n\n".join(contexts)
+        prompt = f"""You are an experienced American history tutor helping a student understand historical concepts.
+
+    Below are some relevant historical passages. Based on this information, provide a clear, structured, and educational answer to the student’s question. The answer should be easy to understand, free of jargon, and explain the key points thoroughly.
+
+    Relevant Contexts:
+    ---------------------
+    {context_text}
+    ---------------------
+
+    Student's Question:
+    {question}
+
+    Answer:"""
+        return prompt
+    '''
+
     def _build_prompt(self, question: str, contexts: list) -> str:
         """
         Construct prompt combining retrieved contexts and the user question.

@@ -77,9 +77,22 @@ ollama pull deepseek-r1:1.5b
 
 If you are using Linux and want to utilize GPU-accelerated FAISS:
 
+---
+
+### ❓ Why can't we use `pip install faiss` or `pip install faiss-gpu`?
+
+⚠️ Important:
+- `pip install faiss` installs only the **CPU version** of FAISS, even on a GPU-enabled machine.
+- `pip install faiss-gpu` **does not exist** officially on PyPI (you will get "No matching distribution found" error).
+
+Therefore, to properly use FAISS with GPU support, you must install it through **conda**.
+
+---
+
 ### Install Conda (if not installed)
 
 ```bash
+# Download Miniconda installer
 curl -O https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash Miniconda3-latest-Linux-x86_64.sh
 ```
@@ -103,7 +116,7 @@ conda activate rag-env
 
 ```bash
 pip install -r requirements.txt
-conda install faiss-gpu -c pytorch
+conda install -c conda-forge faiss-gpu
 ```
 
 ✅ Now your FAISS will use GPU acceleration if available.

@@ -142,6 +142,44 @@ You will see:
 
 ---
 
+## 🐳 5. Deploy Using Docker
+
+You can build and deploy the app in a fully containerized environment using Docker:
+
+```bash
+./docker-startup.sh build
+./docker-startup.sh deploy      # for CPU
+./docker-startup.sh deploy-gpu  # for GPU
+```
+
+## 🧲 6. How We Crawled the Data (American Yawp)
+
+To build our retrieval system, we collected paragraph-level content from [The American Yawp](https://www.americanyawp.com/), a free and open U.S. History textbook.
+
+We wrote a Python script that:
+
+- Visits each chapter listed on the homepage
+- Extracts all visible paragraphs from the content
+- Saves the results (chapter title + paragraph text) into a JSON file
+
+This data is used to create document embeddings and build the FAISS index for retrieval.
+
+### 📁 Output file:
+- `american_yawp_paragraphs.json`
+
+### 📜 How to Run:
+
+1. Install dependencies:
+   ```bash
+   pip install requests beautifulsoup4 lxml tqdm
+   ```
+2. Run the script:
+    ```bash
+   python crawl_american_yawp.py
+   ```
+
+---
+
 ## ⚙️ Features
 
 - Retrieval using FAISS and Sentence-Transformers

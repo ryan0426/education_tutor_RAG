@@ -89,6 +89,30 @@ Therefore, to properly use FAISS with GPU support, you must install it through *
 
 ---
 
+### 🧠 What CUDA versions does conda-installed FAISS-GPU support?
+
+The `faiss-gpu` package installed via **conda** supports **CUDA 10.2 through 12.1**, depending on the version available in the channel you use (`pytorch` or `conda-forge`). For example:
+
+- `conda-forge` often supports newer CUDA versions (e.g., CUDA 12.1).
+- `pytorch` channel typically supports up to CUDA 11.8.
+
+To see available versions and compatibility, you can run:
+```bash
+conda search -c conda-forge faiss-gpu
+```
+
+---
+
+### 🤔 Does this require your system to have the exact same CUDA version?
+
+**No.** One of the key advantages of using `conda` is that it manages the CUDA **runtime** versions internally.
+
+✅ This means that even if your system has a newer CUDA version (like 12.3), `conda` will install a compatible runtime (e.g., CUDA 11.8 or 12.1) **inside your environment** — it does **not rely on your system's global CUDA installation**.
+
+So you **can still use FAISS-GPU** via `conda install` even if your system has a higher or unsupported CUDA version installed globally.
+
+---
+
 ### Install Conda (if not installed)
 
 ```bash
